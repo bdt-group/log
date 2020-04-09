@@ -1,0 +1,286 @@
+%%%-------------------------------------------------------------------
+%%% @author Evgeny Khramtsov <ekhramtsov@bdt.group>
+%%% @copyright (C) 2020, Big Data Technology
+%%% @doc
+%%%
+%%% @end
+%%% Created : 29 Mar 2020 by Evgeny Khramtsov <ekhramtsov@bdt.group>
+%%%-------------------------------------------------------------------
+-module(log).
+
+-behaviour(gen_server).
+
+%% Public API
+-export([start/0]).
+-export([stop/0]).
+-export([set_level/1]).
+%% Internal API
+-export([reload/3]).
+-export([start_link/0]).
+-export([progress_filter/2]).
+-export([defaults/0]).
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-include_lib("kernel/include/logger.hrl").
+
+-record(state, {}).
+-type state() :: #state{}.
+-type option() :: level | rotate_size | rotate_count | single_line |
+                  max_line_size | filesync_repeat_interval | dir |
+                  sync_mode_qlen | drop_mode_qlen | flush_qlen.
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+-spec start_link() -> {ok, pid()} | {error, term()}.
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+-spec start() -> ok | {error, term()}.
+start() ->
+    case application:ensure_all_started(?MODULE) of
+        {ok, _} -> ok;
+        {error, _} = Err -> Err
+    end.
+
+-spec stop() -> ok.
+stop() ->
+    application:stop(?MODULE).
+
+-spec reload(Changed :: [{atom(), term()}],
+             New :: [{atom(), term()}],
+             Removed :: [atom()]) -> ok.
+reload(Changed, New, Removed) ->
+    case lists:keyfind(level, 1, Changed) of
+        {_, Level} -> set_level(Level);
+        false ->
+            case lists:keyfind(level, 1, New) of
+                {_, Level} -> set_level(Level);
+                false ->
+                    case lists:member(level, Removed) of
+                        true -> set_level(default(level));
+                        false -> ok
+                    end
+            end
+    end.
+
+-spec set_level(logger:level()) -> ok.
+set_level(Level) when Level == emergency orelse
+                      Level == alert orelse
+                      Level == critical orelse
+                      Level == error orelse
+                      Level == warning orelse
+                      Level == notice orelse
+                      Level == info orelse
+                      Level == debug ->
+    case current_level() of
+        Level -> ok;
+        PrevLevel ->
+            ?LOG_NOTICE("Changing loglevel from '~s' to '~s'",
+                        [PrevLevel, Level]),
+            _ = logger:set_primary_config(level, Level),
+            ok
+    end.
+
+-spec defaults() -> #{option() => term()}.
+defaults() ->
+    #{level => notice,
+      rotate_size => 1024*1024*10,
+      rotate_count => 5,
+      single_line => false,
+      max_line_size => 1024*100,
+      filesync_repeat_interval => no_repeat,
+      sync_mode_qlen => 1000,
+      drop_mode_qlen => 1000,
+      flush_qlen => 5000,
+      dir => case file:get_cwd() of
+                 {ok, Path} -> Path;
+                 {error, _} -> "."
+             end}.
+
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+-spec init([]) -> {ok, state()} | {stop, term()}.
+init([]) ->
+    process_flag(trap_exit, true),
+    case load() of
+        ok -> {ok, #state{}};
+        {error, Reason} -> {stop, Reason}
+    end.
+
+-spec handle_call(term(), {pid(), term()}, state()) -> {noreply, state()}.
+handle_call(Msg, {Pid, _}, State) ->
+    ?LOG_WARNING("Unexpected call from ~p: ~p", [Pid, Msg]),
+    {noreply, State}.
+
+-spec handle_cast(term(), state()) -> {noreply, state()}.
+handle_cast(Msg, State) ->
+    ?LOG_WARNING("Unexpected cast: ~p", [Msg]),
+    {noreply, State}.
+
+-spec handle_info(term(), state()) -> {noreply, state()}.
+handle_info(Msg, State) ->
+    ?LOG_WARNING("Unexpected info: ~p", [Msg]),
+    {noreply, State}.
+
+-spec terminate(term(), state()) -> any().
+terminate(_Reason, _State) ->
+    ok.
+
+-spec code_change(term() | {down, term()}, state(), term()) -> {ok, state()}.
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+load() ->
+    Dir = get_env_non_empty_string(dir),
+    AllLog = filename:join(Dir, "all.log"),
+    ErrorLog = filename:join(Dir, "error.log"),
+    Level = get_level_from_env(),
+    Config = config(),
+    FmtConfig = formatter_config(),
+    FileFmtConfig = FmtConfig#{template => file_template()},
+    ConsoleFmtConfig = FmtConfig#{template => console_template()},
+    try
+        ok = logger:set_primary_config(level, Level),
+        ok = logger:update_formatter_config(default, ConsoleFmtConfig),
+        case logger:add_primary_filter(progress_report,
+                                       {fun ?MODULE:progress_filter/2, stop}) of
+            ok -> ok;
+            {error, {already_exist, _}} -> ok
+        end,
+        case logger:add_handler(all_log, logger_std_h,
+                                #{level => all,
+                                  config => Config#{file => AllLog},
+                                  formatter => {logger_formatter, FileFmtConfig}}) of
+            ok -> ok;
+            {error, {already_exist, _}} -> ok
+        end,
+        case logger:add_handler(error_log, logger_std_h,
+                                #{level => error,
+                                  config => Config#{file => ErrorLog},
+                                  formatter => {logger_formatter, FileFmtConfig}}) of
+            ok -> ok;
+            {error, {already_exist, _}} -> ok
+        end
+    catch _:{Tag, Err} when Tag == badmatch; Tag == case_clause ->
+            ?LOG_CRITICAL("Failed to set logging: ~p", [Err]),
+            Err
+    end.
+
+-spec progress_filter(logger:log_event(), _) -> logger:log_event() | stop.
+progress_filter(#{level := info,
+                  msg := {report, #{label := {_, progress}}}} = Event, _) ->
+    case current_level() of
+        debug ->
+            logger_filters:progress(Event#{level => debug}, log);
+        _ ->
+            stop
+    end;
+progress_filter(Event, _) ->
+    Event.
+
+config() ->
+    #{max_no_bytes => get_env_pos_int(rotate_size, infinity),
+      max_no_files => get_env_non_neg_int(rotate_count),
+      filesync_repeat_interval => get_env_pos_int(filesync_repeat_interval, no_repeat),
+      sync_mode_qlen => get_env_non_neg_int(sync_mode_qlen),
+      drop_mode_qlen => get_env_pos_int(drop_mode_qlen),
+      flush_qlen => get_env_pos_int(flush_qlen)}.
+
+formatter_config() ->
+    #{legacy_header => false,
+      time_designator => $ ,
+      single_line => get_env_bool(single_line),
+      max_size => get_env_pos_int(max_line_size, unlimited)}.
+
+console_template() ->
+    [time, " [", level, "] ", pid, " " | msg()].
+
+file_template() ->
+    [time, " [", level, "] ", pid, mfa(), " " | msg()].
+
+mfa() ->
+    {mfa, ["@", mfa, {line, [":", line], []}], []}.
+
+msg() ->
+    [{logger_formatter,
+      [[logger_formatter, title], ":", io_lib:nl()], []},
+     msg, io_lib:nl()].
+
+-spec current_level() -> logger:level().
+current_level() ->
+    #{level := Level} = logger:get_primary_config(),
+    Level.
+
+-spec default(option()) -> term().
+default(Opt) ->
+    maps:get(Opt, defaults()).
+
+%%%===================================================================
+%%% Getters for environment variables
+%%%===================================================================
+-spec get_env_non_empty_string(option()) -> string().
+get_env_non_empty_string(Opt) ->
+    case application:get_env(?MODULE, Opt) of
+        {ok, [_|_] = String} ->
+            String;
+        _ ->
+            default(Opt)
+    end.
+
+-spec get_env_non_neg_int(option()) -> non_neg_integer().
+get_env_non_neg_int(Opt) ->
+    case application:get_env(?MODULE, Opt) of
+        {ok, Val} when is_integer(Val) andalso Val >= 0 ->
+            Val;
+        _ ->
+            default(Opt)
+    end.
+
+-spec get_env_pos_int(option()) -> pos_integer().
+get_env_pos_int(Opt) ->
+    case application:get_env(?MODULE, Opt) of
+        {ok, Val} when is_integer(Val) andalso Val > 0 ->
+            Val;
+        _ ->
+            default(Opt)
+    end.
+
+-spec get_env_pos_int(option(), T) -> pos_integer() | T.
+get_env_pos_int(Opt, Other) ->
+    case application:get_env(?MODULE, Opt) of
+        {ok, Val} when (is_integer(Val) andalso Val > 0)
+                       orelse Val == Other ->
+            Val;
+        _ ->
+            default(Opt)
+    end.
+
+-spec get_env_bool(option()) -> boolean().
+get_env_bool(Opt) ->
+    case application:get_env(?MODULE, Opt) of
+        {ok, true} -> true;
+        _ -> default(Opt)
+    end.
+
+-spec get_level_from_env() -> logger:level().
+get_level_from_env() ->
+    case application:get_env(?MODULE, level) of
+        {ok, L} when L == emergency orelse
+                     L == alert orelse
+                     L == critical orelse
+                     L == error orelse
+                     L == warning orelse
+                     L == notice orelse
+                     L == info orelse
+                     L == debug ->
+            L;
+        _ ->
+            default(level)
+    end.

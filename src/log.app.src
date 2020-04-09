@@ -1,0 +1,19 @@
+{application, log,
+ [{description, "A wrapper to simplify logger management"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {log_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    yval
+   ]},
+  {env,[]},
+  {modules, []},
+  {links, []}
+ ]}.
+
+%% Local Variables:
+%% mode: erlang
+%% End:
+%% vim: set filetype=erlang tabstop=8:
