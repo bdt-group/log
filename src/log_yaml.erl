@@ -22,7 +22,7 @@
 validator() ->
     options(
       #{level => enum([emergency, alert, critical, error,
-                       warning, notice, info, debug]),
+                       warning, notice, info, debug, none]),
         rotate_size => pos_int(infinity),
         rotate_count => non_neg_int(),
         single_line => bool(),

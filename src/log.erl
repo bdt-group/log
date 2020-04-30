@@ -74,7 +74,8 @@ set_level(Level) when Level == emergency orelse
                       Level == warning orelse
                       Level == notice orelse
                       Level == info orelse
-                      Level == debug ->
+                      Level == debug orelse
+                      Level == none ->
     case current_level() of
         Level -> ok;
         PrevLevel ->
@@ -279,7 +280,8 @@ get_level_from_env() ->
                      L == warning orelse
                      L == notice orelse
                      L == info orelse
-                     L == debug ->
+                     L == debug orelse
+                     L == none ->
             L;
         _ ->
             default(level)
