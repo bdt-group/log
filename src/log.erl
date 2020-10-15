@@ -19,6 +19,13 @@
 -export([start_link/0]).
 -export([progress_filter/2]).
 -export([defaults/0]).
+%% Getters for environment variables
+-export([get_env_bool/1]).
+-export([get_env_atom/1]).
+-export([get_env_pos_int/2]).
+-export([get_env_non_neg_int/1]).
+-export([get_env_non_empty_string/1]).
+-export([get_env_list/1]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -29,7 +36,8 @@
 -type state() :: #state{}.
 -type option() :: level | rotate_size | rotate_count | single_line |
                   max_line_size | filesync_repeat_interval | dir |
-                  sync_mode_qlen | drop_mode_qlen | flush_qlen.
+                  sync_mode_qlen | drop_mode_qlen | flush_qlen | console |
+                  formatter | service_name | exclude_meta.
 
 %%%===================================================================
 %%% API
@@ -96,6 +104,10 @@ defaults() ->
       sync_mode_qlen => 1000,
       drop_mode_qlen => 1000,
       flush_qlen => 5000,
+      console => false,
+      formatter => plain,
+      service_name => ?MODULE,
+      exclude_meta => [domain, report_cb, gl, error_logger, logger_formatter],
       dir => case file:get_cwd() of
                  {ok, Path} -> Path;
                  {error, _} -> "."
@@ -144,9 +156,11 @@ load() ->
     ErrorLog = filename:join(Dir, "error.log"),
     Level = get_level_from_env(),
     Config = config(),
-    FmtConfig = formatter_config(),
-    FileFmtConfig = FmtConfig#{template => file_template()},
-    ConsoleFmtConfig = FmtConfig#{template => console_template()},
+    Formatter = get_formatter_from_env(),
+    FormatterMod = formatter_module(Formatter),
+    FileFmtConfig = FormatterMod:formatter_config(),
+    %% We always log plain text in console backend
+    ConsoleFmtConfig = log_plain:formatter_config(),
     try
         ok = logger:set_primary_config(level, Level),
         ok = logger:update_formatter_config(default, ConsoleFmtConfig),
@@ -158,16 +172,24 @@ load() ->
         case logger:add_handler(all_log, logger_std_h,
                                 #{level => all,
                                   config => Config#{file => AllLog},
-                                  formatter => {logger_formatter, FileFmtConfig}}) of
+                                  formatter => {FormatterMod, FileFmtConfig}}) of
             ok -> ok;
             {error, {already_exist, _}} -> ok
         end,
         case logger:add_handler(error_log, logger_std_h,
                                 #{level => error,
                                   config => Config#{file => ErrorLog},
-                                  formatter => {logger_formatter, FileFmtConfig}}) of
+                                  formatter => {FormatterMod, FileFmtConfig}}) of
             ok -> ok;
             {error, {already_exist, _}} -> ok
+        end,
+        case get_env_bool(console) of
+            true -> ok;
+            false ->
+                case logger:remove_handler(default) of
+                    ok -> ok;
+                    {error, {not_found, _}} -> ok
+                end
         end
     catch _:{Tag, Err} when Tag == badmatch; Tag == case_clause ->
             ?LOG_CRITICAL("Failed to set logging: ~p", [Err]),
@@ -194,26 +216,6 @@ config() ->
       drop_mode_qlen => get_env_pos_int(drop_mode_qlen),
       flush_qlen => get_env_pos_int(flush_qlen)}.
 
-formatter_config() ->
-    #{legacy_header => false,
-      time_designator => $ ,
-      single_line => get_env_bool(single_line),
-      max_size => get_env_pos_int(max_line_size, unlimited)}.
-
-console_template() ->
-    [time, " [", level, "] ", pid, " " | msg()].
-
-file_template() ->
-    [time, " [", level, "] ", pid, mfa(), " " | msg()].
-
-mfa() ->
-    {mfa, ["@", mfa, {line, [":", line], []}], []}.
-
-msg() ->
-    [{logger_formatter,
-      [[logger_formatter, title], ":", io_lib:nl()], []},
-     msg, io_lib:nl()].
-
 -spec current_level() -> logger:level().
 current_level() ->
     #{level := Level} = logger:get_primary_config(),
@@ -223,6 +225,10 @@ current_level() ->
 default(Opt) ->
     maps:get(Opt, defaults()).
 
+-spec formatter_module(plain | json) -> module().
+formatter_module(plain) -> log_plain;
+formatter_module(json) -> log_json.
+
 %%%===================================================================
 %%% Getters for environment variables
 %%%===================================================================
@@ -231,6 +237,15 @@ get_env_non_empty_string(Opt) ->
     case application:get_env(?MODULE, Opt) of
         {ok, [_|_] = String} ->
             String;
+        _ ->
+            default(Opt)
+    end.
+
+-spec get_env_list(option()) -> list().
+get_env_list(Opt) ->
+    case application:get_env(?MODULE, Opt) of
+        {ok, L} when is_list(L) ->
+            L;
         _ ->
             default(Opt)
     end.
@@ -268,6 +283,21 @@ get_env_bool(Opt) ->
     case application:get_env(?MODULE, Opt) of
         {ok, true} -> true;
         _ -> default(Opt)
+    end.
+
+-spec get_env_atom(option()) -> boolean().
+get_env_atom(Opt) ->
+    case application:get_env(?MODULE, Opt) of
+        {ok, A} when is_atom(A) -> A;
+        _ -> default(Opt)
+    end.
+
+-spec get_formatter_from_env() -> module().
+get_formatter_from_env() ->
+    case application:get_env(?MODULE, formatter) of
+        {ok, plain} -> plain;
+        {ok, json} -> json;
+        _ -> default(formatter)
     end.
 
 -spec get_level_from_env() -> logger:level().

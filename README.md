@@ -1,10 +1,33 @@
-# log
+# Description
 
-A wrapper around Erlang system logger to simply configuration
+A wrapper around Erlang system logger to simply configuration.
 
-# Usage
+# Configuration
 
-Configuration example:
+* `dir`: path to the directory where log files will be created (`all.log` and `error.log`).
+  The default is current directory.
+* `level`: log level. See Erlang's `logger:level()` type description. The default is `notice`.
+* `rotate_size`: a size of a log file to trigger rotation. The default is `1024*1024*10` (10 mb).
+* `rotate_count`: a maximum number of rotated files. The default is `5`.
+* `single_line`: whether to flatten log message into single line or not. The default is `false`.
+* `max_line_size`: truncate log message at this size. The default is `1024*100` (100 kb).
+* `filesync_repeat_interval`, `sync_mode_qlen`, `drop_mode_qlen`, `flush_qlen`: Same as
+  in `logger_std_h(erl)` module. The defaults are correspondingly: `no_repeat`, `1000`, `1000`
+  and `5000`.
+* `console`: Whether to log into console or not. The default is `false`.
+* `formatter`: formatter type: either `plain` or `json`. The default is `plain`. JSON formatter
+  formats log message into [JSON Lines](https://jsonlines.org). The log can be viewed using
+  [jq](https://stedolan.github.io/jq) for example. Note that the option doesn't affect
+  console formatter (i.e. the `default` logger handler) -- plain messages are always logged
+  into console. In other words, JSON formatter is only used for log files.
+* `service_name`: only makes sense when `formatter` is set to `json`. In this case
+  `"service_name": "name"` is added to all logged JSON messages. The default is `log`.
+* `exclude_meta`: only makes sense when `formatter` is set to `json`. In this case keys listed in
+  this option are excluded from resulting `meta` field of the logged JSON message. The default is
+  `[domain, report_cb, gl, error_logger, logger_formatter]`.
+
+## Configuration example
+
 ```erl
 [
   ...
@@ -15,85 +38,25 @@ Configuration example:
   ...
 ]
 ```
-This will produce the configuration like:
-```erl
-...
- #{config =>
-       #{burst_limit_enable => true,burst_limit_max_count => 500,
-         burst_limit_window_time => 1000,compress_on_rotate => false,
-         drop_mode_qlen => 1000,
-         file => "/path/to/log/dir/error.log",file_check => 0,
-         filesync_repeat_interval => no_repeat,flush_qlen => 5000,
-         max_no_bytes => 1024000,max_no_files => 1,
-         modes => [delayed_write,raw,append],
-         overload_kill_enable => false,
-         overload_kill_mem_size => 3000000,
-         overload_kill_qlen => 20000,
-         overload_kill_restart_after => 5000,sync_mode_qlen => 1000,
-         type => file},
-   filter_default => log,filters => [],
-   formatter =>
-       {logger_formatter,#{legacy_header => false,max_size => 102400,
-                           single_line => false,
-                           template =>
-                               [time," [",level,"] ",pid,
-                                {mfa,["@",mfa,{line,[":",line],[]}],[]},
-                                " ",
-                                {logger_formatter,[[logger_formatter,title],":","\n"],[]},
-                                msg,"\n"],
-                           time_designator => 32}},
-   id => error_log,level => error,module => logger_std_h},
- #{config =>
-       #{burst_limit_enable => true,burst_limit_max_count => 500,
-         burst_limit_window_time => 1000,compress_on_rotate => false,
-         drop_mode_qlen => 1000,
-         file => "/path/to/log/dir/all.log",file_check => 0,
-         filesync_repeat_interval => no_repeat,flush_qlen => 5000,
-         max_no_bytes => 1024000,max_no_files => 1,
-         modes => [delayed_write,raw,append],
-         overload_kill_enable => false,
-         overload_kill_mem_size => 3000000,
-         overload_kill_qlen => 20000,
-         overload_kill_restart_after => 5000,sync_mode_qlen => 1000,
-         type => file},
-   filter_default => log,filters => [],
-   formatter =>
-       {logger_formatter,#{legacy_header => false,max_size => 102400,
-                           single_line => false,
-                           template =>
-                               [time," [",level,"] ",pid,
-                                {mfa,["@",mfa,{line,[":",line],[]}],[]},
-                                " ",
-                                {logger_formatter,[[logger_formatter,title],":","\n"],[]},
-                                msg,"\n"],
-                           time_designator => 32}},
-   id => ejabberd_log,level => all,module => logger_std_h},
- #{config =>
-       #{burst_limit_enable => true,burst_limit_max_count => 500,
-         burst_limit_window_time => 1000,drop_mode_qlen => 200,
-         filesync_repeat_interval => no_repeat,flush_qlen => 1000,
-         overload_kill_enable => false,
-         overload_kill_mem_size => 3000000,
-         overload_kill_qlen => 20000,
-         overload_kill_restart_after => 5000,sync_mode_qlen => 10,
-         type => standard_io},
-   filter_default => stop,
-   filters =>
-       [{remote_gl,{fun logger_filters:remote_gl/2,stop}},
-        {domain,{fun logger_filters:domain/2,
-                 {log,super,[otp,sasl]}}},
-        {no_domain,{fun logger_filters:domain/2,
-                    {log,undefined,[]}}}],
-   formatter =>
-       {logger_formatter,#{legacy_header => false,max_size => 102400,
-                           single_line => false,
-                           template =>
-                               [time," [",level,"] ",pid," ",
-                                {logger_formatter,[[logger_formatter,title],":","\n"],[]},
-                                msg,"\n"],
-                           time_designator => 32}},
-   id => default,level => all,module => logger_std_h}]
-...
-```
 
-Feel the difference ;)
+# JSON format example
+
+When logged as `?LOG_DEBUG("Hello, world", [], #{msisdn => 7923423444})` the corresponding JSON log
+message will look as follows:
+```json
+{
+  "ts": "2020-10-15T10:26:15.704095+03:00",
+  "severity": "debug",
+  "service_name": "foo_service",
+  "msg": "Hello, world",
+  "meta": {
+    "msisdn": 7923423444
+  },
+  "erlang": {
+    "pid": "<0.44.0>",
+    "mfa": "hello:world/0",
+    "line": 1929,
+    "file": "hello.erl"
+  }
+}
+```
