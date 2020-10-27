@@ -33,7 +33,6 @@ validator() ->
         flush_qlen => pos_int(),
         console => bool(),
         formatter => enum([plain, json]),
-        service_name => atom(),
         exclude_meta => list(atom()),
         dir => and_then(directory(write), string())},
       [unique, {defaults, log:defaults()}]).

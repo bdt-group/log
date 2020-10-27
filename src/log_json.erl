@@ -17,7 +17,6 @@
 -export_type([config/0]).
 
 -type config() :: #{single_line := boolean(),
-                    service_name := atom(),
                     exclude_meta := [atom()],
                     max_size := pos_integer() | unlimited}.
 
@@ -27,7 +26,6 @@
 -spec formatter_config() -> config().
 formatter_config() ->
     #{single_line => log:get_env_bool(single_line),
-      service_name => log:get_env_atom(service_name),
       exclude_meta => log:get_env_list(exclude_meta),
       max_size => log:get_env_pos_int(max_line_size, unlimited)}.
 
@@ -37,13 +35,14 @@ check_config(_) ->
 
 -spec format(logger:log_event(), config()) -> iolist().
 format(#{level := Level, meta := Meta, msg := Msg},
-       #{service_name := SrvName, exclude_meta := ExcludeKeys} = Config) ->
+       #{exclude_meta := ExcludeKeys} = Config) ->
     JSON1 =
         maps:fold(
           fun(time, USec, Acc) ->
-                  Acc#{ts => format_time(USec)};
-             (Key, Val, Acc) when Key == file; Key == line;
-                                  Key == mfa; Key == pid;
+                  Acc#{timestamp => format_time(USec)};
+             (Key, Val, Acc) when Key == file; Key == line ->
+                  Acc#{Key => term_to_json(Val, Config)};
+             (Key, Val, Acc) when Key == mfa; Key == pid;
                                   Key == domain; Key == report_cb;
                                   Key == gl; Key == error_logger;
                                   Key == logger_formatter ->
@@ -54,8 +53,7 @@ format(#{level := Level, meta := Meta, msg := Msg},
                   Acc#{meta => update_map(Key, Val, Map, Config)}
           end, #{}, maps:without(ExcludeKeys, Meta)),
     JSON2 = JSON1#{severity => Level,
-                   service_name => SrvName,
-                   msg => format_msg(Msg, Meta, Config)},
+                   message => format_msg(Msg, Meta, Config)},
     [jiffy:encode(JSON2), $\n].
 
 %%%===================================================================
@@ -71,7 +69,7 @@ format_msg({string, String}, _, Config) ->
 format_msg({report, Report}, #{report_cb := Fun} = Meta, Config) when is_function(Fun, 1) ->
     format_msg(Fun(Report), maps:remove(report_cb, Meta), Config);
 format_msg({report, Report}, #{report_cb := Fun}, Config) when is_function(Fun, 2) ->
-    Config1 = maps:without([service_name, max_size], Config),
+    Config1 = maps:without([max_size], Config),
     truncate(unicode:characters_to_binary(Fun(Report, Config1)), Config);
 format_msg({Format, Args}, _, Config) ->
     MsgStr0 = io_lib:format(Format, Args),

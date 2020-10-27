@@ -20,8 +20,6 @@ A wrapper around Erlang system logger to simply configuration.
   [jq](https://stedolan.github.io/jq) for example. Note that the option doesn't affect
   console formatter (i.e. the `default` logger handler) -- plain messages are always logged
   into console. In other words, JSON formatter is only used for log files.
-* `service_name`: only makes sense when `formatter` is set to `json`. In this case
-  `"service_name": "name"` is added to all logged JSON messages. The default is `log`.
 * `exclude_meta`: only makes sense when `formatter` is set to `json`. In this case keys listed in
   this option are excluded from resulting `meta` field of the logged JSON message. The default is
   `[domain, report_cb, gl, error_logger, logger_formatter]`.
@@ -45,18 +43,17 @@ When logged as `?LOG_DEBUG("Hello, world", [], #{msisdn => 7923423444})` the cor
 message will look as follows:
 ```json
 {
-  "ts": "2020-10-15T10:26:15.704095+03:00",
+  "timestamp": "2020-10-15T10:26:15.704095+03:00",
   "severity": "debug",
-  "service_name": "foo_service",
-  "msg": "Hello, world",
+  "message": "Hello, world",
+  "line": 1929,
+  "file": "hello.erl",
   "meta": {
-    "msisdn": 7923423444
+    "msisdn": "7923423444"
   },
   "erlang": {
     "pid": "<0.44.0>",
-    "mfa": "hello:world/0",
-    "line": 1929,
-    "file": "hello.erl"
+    "mfa": "hello:world/0"
   }
 }
 ```

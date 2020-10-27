@@ -37,7 +37,7 @@
 -type option() :: level | rotate_size | rotate_count | single_line |
                   max_line_size | filesync_repeat_interval | dir |
                   sync_mode_qlen | drop_mode_qlen | flush_qlen | console |
-                  formatter | service_name | exclude_meta.
+                  formatter | exclude_meta.
 
 %%%===================================================================
 %%% API
@@ -106,7 +106,6 @@ defaults() ->
       flush_qlen => 5000,
       console => false,
       formatter => plain,
-      service_name => ?MODULE,
       exclude_meta => [domain, report_cb, gl, error_logger, logger_formatter],
       dir => case file:get_cwd() of
                  {ok, Path} -> Path;
