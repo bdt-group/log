@@ -14,6 +14,8 @@
 -export([start/0]).
 -export([stop/0]).
 -export([set_level/1]).
+-export([add_log_meta/2]).
+-export([erase_log_meta/1]).
 %% Internal API
 -export([reload/3]).
 -export([start_link/0]).
@@ -38,6 +40,9 @@
                   max_line_size | filesync_repeat_interval | dir |
                   sync_mode_qlen | drop_mode_qlen | flush_qlen | console |
                   formatter | exclude_meta.
+
+-type meta_key() :: atom().
+-type meta_value() :: atom() | binary() | string() | number() | #{meta_value() := meta_value()}.
 
 %%%===================================================================
 %%% API
@@ -111,6 +116,20 @@ defaults() ->
                  {ok, Path} -> Path;
                  {error, _} -> "."
              end}.
+
+-spec add_log_meta(meta_key(), meta_value()) -> ok.
+add_log_meta(Key, Value) ->
+    LogMeta = get_meta(),
+    logger:set_process_metadata(LogMeta#{Key => Value}).
+
+-spec erase_log_meta(meta_key() | [meta_key()]) -> ok.
+erase_log_meta(Keys) when is_list(Keys) ->
+    LogMeta = get_meta(),
+    logger:set_process_metadata(maps:without(Keys, LogMeta));
+erase_log_meta(Key) ->
+    LogMeta = get_meta(),
+    logger:set_process_metadata(maps:without([Key], LogMeta)).
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -314,4 +333,10 @@ get_level_from_env() ->
             L;
         _ ->
             default(level)
+    end.
+
+get_meta() ->
+    case logger:get_process_metadata() of
+        undefined -> #{};
+        M when is_map(M) -> M
     end.
