@@ -42,7 +42,8 @@
                   formatter | exclude_meta.
 
 -type meta_key() :: atom().
--type meta_value() :: atom() | binary() | string() | number() | #{meta_value() := meta_value()}.
+-type meta_value() :: atom() | binary() | string() | number() |
+                      #{meta_value() := meta_value()} | [meta_value()].
 
 %%%===================================================================
 %%% API
