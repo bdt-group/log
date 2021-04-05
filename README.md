@@ -1,5 +1,7 @@
 # Description
 
+[![Build Status](https://travis-ci.com/bdt-group/log.svg?branch=main)](https://travis-ci.com/bdt-group/log)
+
 A wrapper around Erlang system logger to simply configuration.
 
 # Configuration
