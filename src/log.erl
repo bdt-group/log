@@ -190,10 +190,8 @@ load() ->
     FormatterMod = formatter_module(Formatter),
     FileFmtConfig = FormatterMod:formatter_config(),
     %% We always log plain text in console backend
-    ConsoleFmtConfig = log_plain:formatter_config(),
     try
         ok = logger:set_primary_config(level, Level),
-        ok = logger:update_formatter_config(default, ConsoleFmtConfig),
         case logger:add_primary_filter(progress_report,
                                        {fun ?MODULE:progress_filter/2, stop}) of
             ok -> ok;
@@ -214,7 +212,9 @@ load() ->
             {error, {already_exist, _}} -> ok
         end,
         case get_env_bool(console) of
-            true -> ok;
+            true ->
+                ConsoleFmtConfig = log_plain:formatter_config(),
+                ok = logger:update_formatter_config(default, ConsoleFmtConfig);
             false ->
                 case logger:remove_handler(default) of
                     ok -> ok;
