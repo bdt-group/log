@@ -214,8 +214,7 @@ load() ->
         case get_env_bool(console) of
             true ->
                 ConsoleFmtConfig = log_plain:formatter_config(),
-                ok = logger:update_formatter_config(default, ConsoleFmtConfig),
-                ok;
+                ok = logger:update_formatter_config(default, ConsoleFmtConfig);
             false ->
                 case logger:remove_handler(default) of
                     ok -> ok;
