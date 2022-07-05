@@ -211,6 +211,15 @@ load() ->
             ok -> ok;
             {error, {already_exist, _}} -> ok
         end,
+        case logger:add_handler_filter(all_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+            ok -> ok;
+            {error, {already_exist, _}} -> ok
+        end,
+        case logger:add_handler_filter(error_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+            ok -> ok;
+            {error, {already_exist, _}} -> ok
+        end,
+
         case get_env_bool(console) of
             true ->
                 ConsoleFmtConfig = log_plain:formatter_config(),
