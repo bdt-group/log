@@ -8,7 +8,9 @@ filter_supervisor_reports(#{msg := {report, Report}} = Event, _) ->
         #{reason := Reason, errorContext := shutdown_error} when
                 Reason == norpoc
                 orelse Reason == {shutdown, normal} ->
-            ignore;
+            stop;
         _ ->
             Event
-    end.
+    end;
+filter_supervisor_reports(Event, _) ->
+    Event.
