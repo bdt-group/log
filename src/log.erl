@@ -50,7 +50,7 @@
 -type option() :: level | rotate_size | rotate_count | single_line |
                   max_line_size | filesync_repeat_interval | dir |
                   sync_mode_qlen | drop_mode_qlen | flush_qlen | console |
-                  formatter | exclude_meta.
+                  formatter | exclude_meta | print_gun_shutdown_errors.
 
 -type meta_key() :: atom().
 -type meta_value() :: atom() | binary() | string() | number() |
@@ -123,6 +123,7 @@ defaults() ->
       flush_qlen => 5000,
       console => false,
       formatter => plain,
+      print_gun_shutdown_errors => false,
       exclude_meta => [domain, report_cb, gl, error_logger, logger_formatter],
       dir => case file:get_cwd() of
                  {ok, Path} -> Path;
@@ -211,6 +212,11 @@ load() ->
             ok -> ok;
             {error, {already_exist, _}} -> ok
         end,
+        case get_env_bool(print_gun_shutdown_errors) of
+            true -> ok;
+            false -> enable_gun_filters()
+        end,
+
         case get_env_bool(console) of
             true ->
                 ConsoleFmtConfig = log_plain:formatter_config(),
@@ -351,4 +357,14 @@ get_meta() ->
     case logger:get_process_metadata() of
         undefined -> #{};
         M when is_map(M) -> M
+    end.
+
+enable_gun_filters() ->
+    case logger:add_handler_filter(all_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+        ok -> ok;
+        {error, {already_exist, _}} -> ok
+    end,
+    case logger:add_handler_filter(error_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+        ok -> ok;
+        {error, {already_exist, _}} -> ok
     end.
