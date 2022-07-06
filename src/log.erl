@@ -50,7 +50,7 @@
 -type option() :: level | rotate_size | rotate_count | single_line |
                   max_line_size | filesync_repeat_interval | dir |
                   sync_mode_qlen | drop_mode_qlen | flush_qlen | console |
-                  formatter | exclude_meta.
+                  formatter | exclude_meta | print_gun_shutdown_errors.
 
 -type meta_key() :: atom().
 -type meta_value() :: atom() | binary() | string() | number() |
