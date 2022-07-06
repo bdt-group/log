@@ -183,7 +183,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 load() ->
     Dir = get_env_non_empty_string(dir),
-    DisableGunFilters = get_env_disable_gun_filters(),
     AllLog = filename:join(Dir, "all.log"),
     ErrorLog = filename:join(Dir, "error.log"),
     Level = get_level_from_env(),
