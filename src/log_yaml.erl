@@ -45,6 +45,7 @@ validator() ->
         console => bool(),
         formatter => enum([plain, json]),
         exclude_meta => list(atom()),
+        print_gun_shutdown_errors => bool(),
         dir => and_then(directory(write), string())},
       [unique, {defaults, log:defaults()}]).
 

@@ -123,6 +123,7 @@ defaults() ->
       flush_qlen => 5000,
       console => false,
       formatter => plain,
+      print_gun_shutdown_errors => false,
       exclude_meta => [domain, report_cb, gl, error_logger, logger_formatter],
       dir => case file:get_cwd() of
                  {ok, Path} -> Path;
@@ -182,6 +183,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 load() ->
     Dir = get_env_non_empty_string(dir),
+    DisableGunFilters = get_env_disable_gun_filters(),
     AllLog = filename:join(Dir, "all.log"),
     ErrorLog = filename:join(Dir, "error.log"),
     Level = get_level_from_env(),
@@ -211,13 +213,9 @@ load() ->
             ok -> ok;
             {error, {already_exist, _}} -> ok
         end,
-        case logger:add_handler_filter(all_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
-            ok -> ok;
-            {error, {already_exist, _}} -> ok
-        end,
-        case logger:add_handler_filter(error_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
-            ok -> ok;
-            {error, {already_exist, _}} -> ok
+        case get_env_bool(print_gun_shutdown_errors) of
+            true -> ok;
+            false -> enable_gun_filters()
         end,
 
         case get_env_bool(console) of
@@ -360,4 +358,14 @@ get_meta() ->
     case logger:get_process_metadata() of
         undefined -> #{};
         M when is_map(M) -> M
+    end.
+
+enable_gun_filters() ->
+    case logger:add_handler_filter(all_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+        ok -> ok;
+        {error, {already_exist, _}} -> ok
+    end,
+    case logger:add_handler_filter(error_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+        ok -> ok;
+        {error, {already_exist, _}} -> ok
     end.
