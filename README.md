@@ -25,6 +25,10 @@ A wrapper around Erlang system logger to simply configuration.
 * `exclude_meta`: only makes sense when `formatter` is set to `json`. In this case keys listed in
   this option are excluded from resulting `meta` field of the logged JSON message. The default is
   `[domain, report_cb, gl, error_logger, logger_formatter]`.
+* `print_gun_shutdown_errors`: enables logging gun `noproc` and `{shutdown, normal}` error reports
+  in `shutdown_error` context from gun supervisor. Such reports occur when calling process finishes
+  earlier than gun's connection process. This situation does not affect application therefore such
+  reports are supressed by default. `true` enables logging of these reports. Default is `false`.
 
 ## Configuration example
 
