@@ -43,10 +43,12 @@ A wrapper around Erlang system logger to simply configuration.
 ]
 ```
 
-# JSON format example
+# Log message formatting examples
 
-When logged as `?LOG_DEBUG("Hello, world", [], #{msisdn => 7923423444})` the corresponding JSON log
-message will look as follows:
+When logged as `?LOG_DEBUG("Hello, world", [], #{msisdn => 7923423444})` the corresponding
+log message for:
+
+- JSON:
 ```json
 {
   "timestamp": "2020-10-15T10:26:15.704095+03:00",
@@ -62,4 +64,9 @@ message will look as follows:
     "mfa": "hello:world/0"
   }
 }
+```
+
+- Plain text:
+```
+2020-10-15T10:26:15.704095+03:00 [debug] [<0.44.0> hello:world/0] [msisdn=7923423444] [hello.erl:1929] Hello, world
 ```

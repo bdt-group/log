@@ -35,27 +35,51 @@
 -spec formatter_config() -> config().
 formatter_config() ->
     #{legacy_header => false,
-      time_designator => $ ,
-      template => formatter_template(),
+      time_designator => $T,
+      exclude_meta => log:get_env_list(exclude_meta),
       single_line => log:get_env_bool(single_line),
       max_size => log:get_env_pos_int(max_line_size, unlimited)}.
 
 -spec check_config(config()) -> ok | {error, term()}.
 check_config(Config) ->
-    logger_formatter:check_config(Config).
+    logger_formatter:check_config(formatter_config(Config)).
+
+%% Effective template:
+%%
+%% timestamp [level] [pid mfa] [Meta] [file:line] Msg
+%%
+%% where application code business Meta:
+%% #{key1 => #{key11 => Val11}, key2 => Val2}
+%% is formatted as:
+%% key1_key11=Val11, key2=Val2
 
 -spec format(logger:log_event(), config()) -> unicode:chardata().
-format(LogEvent, Config) ->
-    logger_formatter:format(LogEvent, Config).
+format(#{meta := Meta} = LogEvent, #{exclude_meta := ExcludeKeys} = Config) ->
+    Config1 = formatter_config(Config),
+    Template1 = [time, " [", level, "] [", pid, mfa(), "] [", msg, "] "],
+    Template2 = [source() | msg()],
+    flatlog:format(LogEvent#{msg => {report, user_meta(ExcludeKeys, Meta)}},
+                   Config1#{template => Template1,
+                            map_depth => 3})
+        ++
+        logger_formatter:format(LogEvent,
+                                Config1#{template => Template2}).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-formatter_template() ->
-     [time, " [", level, "] ", pid, mfa(), " " | msg()].
+user_meta(ExcludeKeys, Meta) ->
+    maps:without([time, file, line, mfa, pid, domain, report_cb, gl,
+                  error_logger, logger_formatter | ExcludeKeys], Meta).
+
+formatter_config(Config) ->
+    maps:without([exclude_meta], Config).
 
 mfa() ->
-    {mfa, ["@", mfa, {line, [":", line], []}], []}.
+    {mfa, [" ", mfa], []}.
+
+source() ->
+    {file, ["[", file, {line, [":", line], []}, "] "], []}.
 
 msg() ->
     [{logger_formatter,
