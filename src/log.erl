@@ -216,16 +216,20 @@ load() ->
             true -> ok;
             false -> enable_gun_filters()
         end,
-
-        case get_env_bool(console) of
-            true ->
-                ConsoleFmtConfig = log_plain:formatter_config(),
-                ok = logger:update_formatter_config(default, ConsoleFmtConfig);
-            false ->
-                case logger:remove_handler(default) of
-                    ok -> ok;
-                    {error, {not_found, _}} -> ok
-                end
+        %% Get rid of the default handler
+        case logger:remove_handler(default) of
+            ok -> ok;
+            {error, {not_found, _}} -> ok
+        end,
+        case get_env_bool(console) andalso
+            logger:add_handler(console_log, logger_std_h,
+                               #{level => all,
+                                 config => #{type => standard_io},
+                                 formatter => {FormatterMod, FileFmtConfig}})
+        of
+            false -> ok;
+            ok -> ok;
+            {error, {already_exist, _}} -> ok
         end
     catch _:{Tag, Err} when Tag == badmatch; Tag == case_clause ->
             ?LOG_CRITICAL("Failed to set logging: ~p", [Err]),
