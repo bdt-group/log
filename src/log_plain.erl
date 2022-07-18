@@ -50,20 +50,26 @@ check_config(Config) ->
 %%
 %% where application code business Meta:
 %% #{key1 => #{key11 => Val11}, key2 => Val2}
-%% is formatted as:
+%% is formatted by flatlog as:
 %% key1_key11=Val11, key2=Val2
 
 -spec format(logger:log_event(), config()) -> unicode:chardata().
 format(#{meta := Meta} = LogEvent, #{exclude_meta := ExcludeKeys} = Config) ->
     Config1 = formatter_config(Config),
-    Template1 = [time, " [", level, "] [", pid, mfa(), "] [", msg, "] "],
-    Template2 = [source() | msg()],
-    flatlog:format(LogEvent#{msg => {report, user_meta(ExcludeKeys, Meta)}},
-                   Config1#{template => Template1,
-                            map_depth => 3})
-        ++
-        logger_formatter:format(LogEvent,
-                                Config1#{template => Template2}).
+    Template1 = [time, " [", level, "] [", pid, mfa(), "] ["],
+    Template2 = ["] ", source() | msg()],
+    case user_meta(ExcludeKeys, Meta) of
+        UserMeta when map_size(UserMeta) == 0 ->
+            logger_formatter:format(LogEvent,
+                                    Config1#{template => Template1 ++ Template2});
+        UserMeta ->
+            flatlog:format(LogEvent#{msg => {report, UserMeta}},
+                           Config1#{template => Template1 ++ [msg],
+                                    map_depth => 3})
+                ++
+                logger_formatter:format(LogEvent,
+                                        Config1#{template => Template2})
+    end.
 
 %%%===================================================================
 %%% Internal functions
