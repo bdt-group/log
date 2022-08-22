@@ -36,6 +36,7 @@
 formatter_config() ->
     #{legacy_header => false,
       time_designator => $T,
+      time_offset => "",
       exclude_meta => log:get_env_list(exclude_meta),
       single_line => log:get_env_bool(single_line),
       max_size => log:get_env_pos_int(max_line_size, unlimited)}.
