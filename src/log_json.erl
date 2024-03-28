@@ -138,7 +138,7 @@ single_line(S, #{single_line := true}) ->
           trim(
             lists:reverse(
               trim(S, false)), true)),
-    re:replace(T, ",?\r?\n\s*", ", ",
+    re:replace(T, "(,?)\r?\n\s*", "\\1 ",
                [{return, list}, global, unicode]);
 single_line(S, _) ->
     S.
