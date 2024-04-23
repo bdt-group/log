@@ -247,8 +247,7 @@ add_handler(Level0, Config, Filters) ->
         formatter => {FormatterMod, FileFmtConfig},
         filters => Filters
     },
-    HandlerID = list_to_atom(atom_to_list(Level) ++ "_handler"),
-    case logger:add_handler(HandlerID, logger_std_h, HandlerConfig) of
+    case logger:add_handler(get_handler_id(Level), logger_std_h, HandlerConfig) of
         ok -> ok;
         {error, {already_exist, _}} -> ok
     end.
@@ -385,7 +384,10 @@ get_meta() ->
     end.
 
 enable_gun_filters(Level) ->
-    case logger:add_handler_filter(Level, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+    case logger:add_handler_filter(get_handler_id(Level), gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
         ok -> ok;
         {error, {already_exist, _}} -> ok
     end.
+
+get_handler_id(Level) ->
+    list_to_atom(atom_to_list(Level) ++ "_handler").
