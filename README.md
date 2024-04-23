@@ -11,6 +11,8 @@ A wrapper around Erlang system logger to simply configuration.
 * `level`: log level. See Erlang's `logger:level()` type description. The default is `notice`.
 * `rotate_size`: a size of a log file to trigger rotation. The default is `1024*1024*10` (10 mb).
 * `rotate_count`: a maximum number of rotated files. The default is `5`.
+* `logging_mode`: avail type: [`single`, `separate`, `debug_and_error`]. Filter events in separate file by level
+  or in single.  The default is `debug_and_error`.
 * `single_line`: whether to flatten log message into single line or not. The default is `false`.
 * `max_line_size`: truncate log message at this size. The default is `1024*100` (100 kb).
 * `filesync_repeat_interval`, `sync_mode_qlen`, `drop_mode_qlen`, `flush_qlen`: Same as

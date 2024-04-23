@@ -56,6 +56,8 @@
 -type meta_value() :: atom() | binary() | string() | number() |
                       #{meta_value() := meta_value()} | [meta_value()].
 
+-define(LogLevels, [error, warning, notice, info, debug]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -115,6 +117,7 @@ defaults() ->
     #{level => notice,
       rotate_size => 1024*1024*10,
       rotate_count => 5,
+      logging_mode => debug_and_error,
       single_line => false,
       max_line_size => 1024*100,
       filesync_repeat_interval => no_repeat,
@@ -182,51 +185,38 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 load() ->
-    Dir = get_env_non_empty_string(dir),
-    AllLog = filename:join(Dir, "all.log"),
-    ErrorLog = filename:join(Dir, "error.log"),
     Level = get_level_from_env(),
     Config = config(),
-    Formatter = get_formatter_from_env(),
-    FormatterMod = formatter_module(Formatter),
-    FileFmtConfig = FormatterMod:formatter_config(),
     %% We always log plain text in console backend
     try
         ok = logger:set_primary_config(level, Level),
-        case logger:add_primary_filter(progress_report,
-                                       {fun ?MODULE:progress_filter/2, stop}) of
+        case logger:add_primary_filter(progress_report, {fun ?MODULE:progress_filter/2, stop}) of
             ok -> ok;
             {error, {already_exist, _}} -> ok
         end,
-        case logger:add_handler(all_log, logger_std_h,
-                                #{level => all,
-                                  config => Config#{file => AllLog},
-                                  formatter => {FormatterMod, FileFmtConfig}}) of
-            ok -> ok;
-            {error, {already_exist, _}} -> ok
-        end,
-        case logger:add_handler(error_log, logger_std_h,
-                                #{level => error,
-                                  config => Config#{file => ErrorLog},
-                                  formatter => {FormatterMod, FileFmtConfig}}) of
-            ok -> ok;
-            {error, {already_exist, _}} -> ok
+        case Level of
+            none -> ok;
+            _ ->
+                case get_env_atom(logging_mode) of
+                    single ->
+                        Filters = [{single, {fun logger_filters:level/2, {log, gteq, Level}}}],
+                        add_handler(Level, Config, Filters);
+                    separate ->
+                        [add_handler(FileLogLevel, Config) || FileLogLevel <- get_level_list(Level)];
+                    debug_and_error ->
+                        [add_handler(FileLogLevel, Config) || FileLogLevel <- [error, debug]]
+                end
         end,
         case get_env_bool(print_gun_shutdown_errors) of
             true -> ok;
-            false -> enable_gun_filters()
+            false -> enable_gun_filters(Level)
         end,
         %% Get rid of the default handler
         case logger:remove_handler(default) of
             ok -> ok;
             {error, {not_found, _}} -> ok
         end,
-        case get_env_bool(console) andalso
-            logger:add_handler(console_log, logger_std_h,
-                               #{level => all,
-                                 config => #{type => standard_io},
-                                 formatter => {FormatterMod, FileFmtConfig}})
-        of
+        case get_env_bool(console) andalso add_handler(console, Config) of
             false -> ok;
             ok -> ok;
             {error, {already_exist, _}} -> ok
@@ -235,6 +225,37 @@ load() ->
             ?LOG_CRITICAL("Failed to set logging: ~p", [Err]),
             Err
     end.
+
+add_handler(none, _Config) ->
+    ok;
+add_handler(Level0, Config) ->
+    add_handler(Level0, Config, []).
+add_handler(Level0, Config, Filters) ->
+    Dir = get_env_non_empty_string(dir),
+    Formatter = get_formatter_from_env(),
+    FormatterMod = formatter_module(Formatter),
+    FileFmtConfig = FormatterMod:formatter_config(),
+    {Log, Level} =
+        case Level0 of
+            console -> {standard_io, all};
+            debug -> {filename:join(Dir, "all.log"), Level0};
+            _ -> {filename:join(Dir, [Level0, ".log"]), Level0}
+        end,
+    HandlerConfig = #{
+        level => Level,
+        config => Config#{file => Log},
+        formatter => {FormatterMod, FileFmtConfig},
+        filters => Filters
+    },
+    HandlerID = list_to_atom(atom_to_list(Level) ++ "_handler"),
+    case logger:add_handler(HandlerID, logger_std_h, HandlerConfig) of
+        ok -> ok;
+        {error, {already_exist, _}} -> ok
+    end.
+
+get_level_list(Level) -> get_level_list(?LogLevels, Level, []).
+get_level_list([Level|_], Level, Acc) -> lists:reverse([Level|Acc]);
+get_level_list([L|Levels], Level, Acc) -> get_level_list(Levels, Level, [L|Acc]).
 
 -spec progress_filter(logger:log_event(), _) -> logger:log_event() | stop.
 progress_filter(#{level := info,
@@ -363,12 +384,8 @@ get_meta() ->
         M when is_map(M) -> M
     end.
 
-enable_gun_filters() ->
-    case logger:add_handler_filter(all_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
-        ok -> ok;
-        {error, {already_exist, _}} -> ok
-    end,
-    case logger:add_handler_filter(error_log, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+enable_gun_filters(Level) ->
+    case logger:add_handler_filter(Level, gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
         ok -> ok;
         {error, {already_exist, _}} -> ok
     end.
