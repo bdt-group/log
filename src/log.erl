@@ -56,7 +56,7 @@
 -type meta_value() :: atom() | binary() | string() | number() |
                       #{meta_value() := meta_value()} | [meta_value()].
 
--define(LogLevels, [emergency, alert, critical, error, warning, notice, info, debug, all]).
+-define(LogLevels, [error, warning, notice, info, debug]).
 
 %%%===================================================================
 %%% API
@@ -117,7 +117,7 @@ defaults() ->
     #{level => notice,
       rotate_size => 1024*1024*10,
       rotate_count => 5,
-      file_filter => separate,
+      logging_mode => debug_and_error,
       single_line => false,
       max_line_size => 1024*100,
       filesync_repeat_interval => no_repeat,
@@ -190,20 +190,21 @@ load() ->
     %% We always log plain text in console backend
     try
         ok = logger:set_primary_config(level, Level),
-        case logger:add_primary_filter(progress_report,
-            {fun ?MODULE:progress_filter/2, stop}) of
+        case logger:add_primary_filter(progress_report, {fun ?MODULE:progress_filter/2, stop}) of
             ok -> ok;
             {error, {already_exist, _}} -> ok
         end,
         case Level of
             none -> ok;
             _ ->
-                case get_env_atom(file_filter) of
+                case get_env_atom(logging_mode) of
                     single ->
                         Filters = [{single, {fun logger_filters:level/2, {log, gteq, Level}}}],
                         add_handler(Level, Config, Filters);
                     separate ->
-                        [add_handler(FileLogLevel, Config) || FileLogLevel <- get_level_list(Level)]
+                        [add_handler(FileLogLevel, Config) || FileLogLevel <- get_level_list(Level)];
+                    debug_and_error ->
+                        [add_handler(FileLogLevel, Config) || FileLogLevel <- [error, debug]]
                 end
         end,
         case get_env_bool(print_gun_shutdown_errors) of
@@ -237,6 +238,7 @@ add_handler(Level0, Config, Filters) ->
     {Log, Level} =
         case Level0 of
             console -> {standard_io, all};
+            debug -> {filename:join(Dir, "all.log"), Level0};
             _ -> {filename:join(Dir, [Level0, ".log"]), Level0}
         end,
     HandlerConfig = #{
@@ -245,7 +247,7 @@ add_handler(Level0, Config, Filters) ->
         formatter => {FormatterMod, FileFmtConfig},
         filters => Filters
     },
-    HandlerID = list_to_atom(atom_to_list(Level) ++ "_log"),
+    HandlerID = list_to_atom(atom_to_list(Level) ++ "_handler"),
     case logger:add_handler(HandlerID, logger_std_h, HandlerConfig) of
         ok -> ok;
         {error, {already_exist, _}} -> ok

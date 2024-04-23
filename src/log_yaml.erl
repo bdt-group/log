@@ -36,7 +36,7 @@ validator() ->
                        warning, notice, info, debug, none]),
         rotate_size => pos_int(infinity),
         rotate_count => non_neg_int(),
-        file_filter => enum([single, separate]),
+        logging_mode => enum([single, separate, debug_and_error]),
         single_line => bool(),
         max_line_size => pos_int(unlimited),
         filesync_repeat_interval => either(no_repeat, timeout(millisecond)),
