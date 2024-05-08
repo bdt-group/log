@@ -222,18 +222,15 @@ load() ->
             ok -> ok;
             {error, {not_found, _}} -> ok
         end,
-        case get_env_bool(console) andalso add_handler(console, Config) of
+        case get_env_bool(console) of
             false -> ok;
-            ok -> ok;
-            {error, {already_exist, _}} -> ok
+            true -> add_handler(console, Config)
         end
     catch _:{Tag, Err} when Tag == badmatch; Tag == case_clause ->
             ?LOG_CRITICAL("Failed to set logging: ~p", [Err]),
             Err
     end.
 
-add_handler(none, _Config) ->
-    ok;
 add_handler(Level0, Config) ->
     add_handler(Level0, Config, []).
 add_handler(Level0, Config, Filters) ->
