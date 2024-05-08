@@ -392,7 +392,9 @@ get_meta() ->
 enable_gun_filters(LevelList) when is_list(LevelList) ->
     lists:foreach(fun enable_gun_filters/1, LevelList);
 enable_gun_filters(Level) ->
-    case logger:add_handler_filter(get_handler_id(Level), gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+    case logger:add_handler_filter(get_handler_id(Level),
+                                   gun_error_filter,
+                                   {fun log_gun:filter_supervisor_reports/2, #{}}) of
         ok -> ok;
         {error, {already_exist, _}} -> ok
     end.
