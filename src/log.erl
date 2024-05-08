@@ -205,7 +205,7 @@ load() ->
                             [Level];
                         separate ->
                             LList = get_level_list(Level),
-                            [add_handler(FileLogLevel, Config) || FileLogLevel <- get_level_list(Level)],
+                            [add_handler(FileLogLevel, Config) || FileLogLevel <- LList],
                             LList;
                         debug_and_error ->
                             LList = [error, debug],
