@@ -194,22 +194,28 @@ load() ->
             ok -> ok;
             {error, {already_exist, _}} -> ok
         end,
-        case Level of
-            none -> ok;
-            _ ->
-                case get_env_atom(logging_mode) of
-                    single ->
-                        Filters = [{single, {fun logger_filters:level/2, {log, gteq, Level}}}],
-                        add_handler(Level, Config, Filters);
-                    separate ->
-                        [add_handler(FileLogLevel, Config) || FileLogLevel <- get_level_list(Level)];
-                    debug_and_error ->
-                        [add_handler(FileLogLevel, Config) || FileLogLevel <- [error, debug]]
-                end
-        end,
+        LevelList =
+            case Level of
+                none -> ok;
+                _ ->
+                    case get_env_atom(logging_mode) of
+                        single ->
+                            Filters = [{single, {fun logger_filters:level/2, {log, gteq, Level}}}],
+                            add_handler(Level, Config, Filters),
+                            [Level];
+                        separate ->
+                            LList = get_level_list(Level),
+                            [add_handler(FileLogLevel, Config) || FileLogLevel <- get_level_list(Level)],
+                            LList;
+                        debug_and_error ->
+                            LList = [error, debug],
+                            [add_handler(FileLogLevel, Config) || FileLogLevel <- LList],
+                            LList
+                    end
+            end,
         case get_env_bool(print_gun_shutdown_errors) of
             true -> ok;
-            false -> enable_gun_filters(Level)
+            false -> enable_gun_filters(LevelList)
         end,
         %% Get rid of the default handler
         case logger:remove_handler(default) of
@@ -383,6 +389,8 @@ get_meta() ->
         M when is_map(M) -> M
     end.
 
+enable_gun_filters(LevelList) when is_list(LevelList) ->
+    lists:foreach(fun enable_gun_filters/1, LevelList);
 enable_gun_filters(Level) ->
     case logger:add_handler_filter(get_handler_id(Level), gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
         ok -> ok;
