@@ -194,40 +194,43 @@ load() ->
             ok -> ok;
             {error, {already_exist, _}} -> ok
         end,
-        case Level of
-            none -> ok;
-            _ ->
-                case get_env_atom(logging_mode) of
-                    single ->
-                        Filters = [{single, {fun logger_filters:level/2, {log, gteq, Level}}}],
-                        add_handler(Level, Config, Filters);
-                    separate ->
-                        [add_handler(FileLogLevel, Config) || FileLogLevel <- get_level_list(Level)];
-                    debug_and_error ->
-                        [add_handler(FileLogLevel, Config) || FileLogLevel <- [error, debug]]
-                end
-        end,
+        LevelList =
+            case Level of
+                none -> ok;
+                _ ->
+                    case get_env_atom(logging_mode) of
+                        single ->
+                            Filters = [{single, {fun logger_filters:level/2, {log, gteq, Level}}}],
+                            add_handler(Level, Config, Filters),
+                            [Level];
+                        separate ->
+                            LList = get_level_list(Level),
+                            [add_handler(FileLogLevel, Config) || FileLogLevel <- LList],
+                            LList;
+                        debug_and_error ->
+                            LList = [error, debug],
+                            [add_handler(FileLogLevel, Config) || FileLogLevel <- LList],
+                            LList
+                    end
+            end,
         case get_env_bool(print_gun_shutdown_errors) of
             true -> ok;
-            false -> enable_gun_filters(Level)
+            false -> enable_gun_filters(LevelList)
         end,
         %% Get rid of the default handler
         case logger:remove_handler(default) of
             ok -> ok;
             {error, {not_found, _}} -> ok
         end,
-        case get_env_bool(console) andalso add_handler(console, Config) of
+        case get_env_bool(console) of
             false -> ok;
-            ok -> ok;
-            {error, {already_exist, _}} -> ok
+            true -> add_handler(console, Config)
         end
     catch _:{Tag, Err} when Tag == badmatch; Tag == case_clause ->
             ?LOG_CRITICAL("Failed to set logging: ~p", [Err]),
             Err
     end.
 
-add_handler(none, _Config) ->
-    ok;
 add_handler(Level0, Config) ->
     add_handler(Level0, Config, []).
 add_handler(Level0, Config, Filters) ->
@@ -345,7 +348,7 @@ get_env_bool(Opt) ->
         _ -> default(Opt)
     end.
 
--spec get_env_atom(option()) -> boolean().
+-spec get_env_atom(option()) -> atom().
 get_env_atom(Opt) ->
     case application:get_env(?MODULE, Opt) of
         {ok, A} when is_atom(A) -> A;
@@ -360,7 +363,7 @@ get_formatter_from_env() ->
         _ -> default(formatter)
     end.
 
--spec get_level_from_env() -> logger:level().
+-spec get_level_from_env() -> logger:level() | none.
 get_level_from_env() ->
     case application:get_env(?MODULE, level) of
         {ok, L} when L == emergency orelse
@@ -383,8 +386,12 @@ get_meta() ->
         M when is_map(M) -> M
     end.
 
+enable_gun_filters(LevelList) when is_list(LevelList) ->
+    lists:foreach(fun enable_gun_filters/1, LevelList);
 enable_gun_filters(Level) ->
-    case logger:add_handler_filter(get_handler_id(Level), gun_error_filter, {fun log_gun:filter_supervisor_reports/2, #{}}) of
+    case logger:add_handler_filter(get_handler_id(Level),
+                                   gun_error_filter,
+                                   {fun log_gun:filter_supervisor_reports/2, #{}}) of
         ok -> ok;
         {error, {already_exist, _}} -> ok
     end.
