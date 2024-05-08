@@ -351,7 +351,7 @@ get_env_bool(Opt) ->
         _ -> default(Opt)
     end.
 
--spec get_env_atom(option()) -> boolean().
+-spec get_env_atom(option()) -> atom().
 get_env_atom(Opt) ->
     case application:get_env(?MODULE, Opt) of
         {ok, A} when is_atom(A) -> A;
@@ -366,7 +366,7 @@ get_formatter_from_env() ->
         _ -> default(formatter)
     end.
 
--spec get_level_from_env() -> logger:level().
+-spec get_level_from_env() -> logger:level() | none.
 get_level_from_env() ->
     case application:get_env(?MODULE, level) of
         {ok, L} when L == emergency orelse
